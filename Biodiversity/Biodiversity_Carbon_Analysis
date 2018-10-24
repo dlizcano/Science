@@ -1,0 +1,69 @@
+
+# To explore the Biodiversity role in the Carbon - Soil compactation correlation found by Diego N.
+
+## The initial idea: To sample Carbon, Bettles, Ants and Spiders in a 100-150 m grid in Cubarral (Meta) to model the spatially splicit relatinship between covariates, incorporating remote sensing info. The initial idea changed to sample just ants and dung bettles in a 80 m grid. The Carbon data came in September 2018. 
+
+## Data analysis sugestions y Diego N.
+
+library (tidyverse) # Data handling
+library (raster)  # grids, rasters
+library (rgeos) # coord transform
+library (rgdal) # coord transform
+library (ggmap) # visualization
+library (lubridate) # date managemgemt
+library (readxl) # read excel data
+library (sf) # vector maps in R
+library (sp) # vector old fashon maps in R
+library (mapview) # see maps in web
+library (sjPlot) # wiew GLM plots
+library (sjmisc) # wiew GLM plots
+library (sqldf) # Table with permutations
+library (fields) # to do image.plot
+library (rsq)
+library (easyGgplot2) # multiplot
+library (lme4) # GLMM
+
+path <- "D:/BoxFiles/Box Sync/CodigoR/Carbon-Biodiv/Data"
+beetle_data <- read_excel(paste(path,"/TNC_Escarabajo_Carbono_June_2018.xlsx", sep=""), 
+    sheet = "Base_Escarabajos")
+
+beetle_data <- beetle_data %>% group_by(Punto) %>% 
+  mutate (Richness = n_distinct(Especie))  # New column richness
+
+beetle_data$LongDD <- beetle_data$LonDD * (-1)
+
+ants_data <- read_excel(paste(path,"/TNC_Escarabajo_Carbono_June_2018.xlsx", sep=""), 
+    sheet = "Base_Hormigas")
+
+ants_data <- ants_data %>% group_by(Punto) %>% 
+  mutate (Richness = n_distinct(Especie))
+
+ants_data$LongDD <- ants_data$LonDD * (-1)
+ 
+#### Check maximum
+print("max")
+max(unique(beetle_data$Punto))
+
+#### Check minumum
+print("min")
+min(unique(beetle_data$Punto))
+
+carbono_data <- read_excel(paste(path,"/CARBONO-08-10-2018.xlsx", sep=""), 
+    sheet = "Densidad-Carbono")
+
+
+
+ind1 <- which(carbono_data$Cobertura=="Yopo")
+carbono_data$Cobertura[ind1]<-"Silvopastoril"
+
+ind2 <- which(carbono_data$Cobertura=="Pastizal arbolado")
+carbono_data$Cobertura[ind2]<-"Silvopastoril"
+
+ind3 <- which(carbono_data$Cobertura=="Ripario")
+carbono_data$Cobertura[ind3]<-"Bosque"
+
+### select < =15
+carbono_data2 <- subset(carbono_data, Carbono <= 15)
+ 
+ 
+ 
