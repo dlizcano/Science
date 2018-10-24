@@ -1,0 +1,655 @@
+% function UserDataCal = CalibrationModel(UserData)
+%% BASE DATA 
+% Project               : Landscape planning for agro-industrial expansion 
+%                         in a large, well-preserved savanna: how to plan 
+%                         multifunctional landscapes at scale for nature and 
+%                         people in the Orinoquia region, Colombia
+% Author                : Jonathan Nogales Pimentel
+% Email                 : nogales02@hotmail.comHydrology Specialist  : Carlos Andrés Rogéliz
+% Company               : The Nature Conservancy - TNC
+% 
+%% MODEL OF THOMAS - (1981) - "abcd"
+% Copyright (C) 2017 Apox Technologies
+% This program is free software: you can redistribute it and/or modify it 
+% under the terms of the GNU General Public License as published by the 
+% Free Software Foundation, either version 3 of the License, or option) any 
+% later version. This program is distributed in the hope that it will be 
+% useful, but WITHOUT ANY WARRANTY; without even the implied warranty of 
+% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+% ee the GNU General Public License for more details. You should have 
+% received a copy of the GNU General Public License along with this program.  
+% If not, see http://www.gnu.org/licenses/.
+%
+% INPUT DATA
+
+%% INPUT DATA
+clearvars -except UserData
+% -------------------------------------------------------------------------
+% Parameter Thomas Model
+% -------------------------------------------------------------------------
+try
+    Tmp = xlsread( fullfile(UserData.PathProject,'DATA','Params',UserData.DataParams), 'Thomas');
+catch
+    errordlg(['The Excel "',UserData.DataParams,'" not found'],'!! Error !!')
+    return
+end
+
+UserData.BasinCode          = Tmp(:,1);
+UserData.BasinArea          = Tmp(:,2);
+UserData.TypeBasinCal       = Tmp(:,3);
+UserData.IDAq               = Tmp(:,4);
+UserData.Arc_InitNode       = Tmp(:,5);
+UserData.Arc_EndNode        = Tmp(:,6);
+UserData.Sw                 = Tmp(:,7);
+UserData.Sg                 = Tmp(:,8);
+
+% -------------------------------------------------------------------------
+% Parameter and States Variable Floodplains
+% -------------------------------------------------------------------------
+try
+    Tmp = xlsread( fullfile(UserData.PathProject,'DATA','Params',UserData.DataParams), 'Floodplains');
+catch
+    errordlg(['The Excel "',UserData.DataParams,'" not found'],'!! Error !!')
+    return
+end
+
+UserData.ArcIDFlood         = Tmp(:,1);
+UserData.FloodArea          = Tmp(:,2);
+UserData.Vh                 = Tmp(:,3);
+
+% -------------------------------------------------------------------------
+% River Downstream
+% -------------------------------------------------------------------------
+try
+    Tmp = xlsread( fullfile(UserData.PathProject,'DATA','Params',UserData.DataParams), 'Downstream');
+catch
+    errordlg(['The Excel "',UserData.DataParams,'" not found'],'!! Error !!')
+    return
+end
+
+UserData.ArcID_Downstream   = Tmp;
+
+% -------------------------------------------------------------------------
+% Calibration Streamflow
+% -------------------------------------------------------------------------
+try
+    Tmp = xlsread( fullfile(UserData.PathProject,'DATA','Params',UserData.DataParams), 'Control_Point');
+catch
+    errordlg(['The Excel "',UserData.DataParams,'" not found'],'!! Error !!')
+    return
+end
+
+% Tmp = [ 32077070 3381 3];
+    
+% Tmp = [ 32077110 2983 1;
+%         32077100 3076 2;
+%         32077070 3381 3];
+
+% Tmp = [ 32077110 2983 1;
+%         32037010 3856 1;
+%         32067020 2757 1;
+%         32067030 2549 1;
+%         32037030 4074 2;
+%         32077080 3391 2;
+%         32077100 3076 2;
+%         32077070 3381 3;
+%         32047010 3724 3;
+%         32087040 3544 4;
+%         32107010 3755 5];
+    
+UserData.CodeGauges         = Tmp(:,1);
+UserData.ArIDGauges         = Tmp(:,2);
+UserData.CatGauges          = Tmp(:,3);
+
+% -------------------------------------------------------------------------
+% Demand and Returns Paremeters
+% -------------------------------------------------------------------------
+try
+    Tmp = xlsread( fullfile(UserData.PathProject,'DATA','Params',UserData.DataParams), 'Demand');
+    if isempty(Tmp)
+        Tmp = NaN(1,9);
+    end
+catch
+    errordlg(['The Excel "',UserData.DataParams,'" not found'],'!! Error !!')
+    return
+end
+
+
+Tmp1 = Tmp(:,1);
+UserData.IDExtAgri          = Tmp1(isnan(Tmp1) == 0);
+Tmp1 = Tmp(:,2);
+UserData.IDExtDom           = Tmp1(isnan(Tmp1) == 0);
+Tmp1 = Tmp(:,3);
+UserData.IDExtLiv           = Tmp1(isnan(Tmp1) == 0);
+Tmp1 = Tmp(:,4);
+UserData.IDExtHy            = Tmp1(isnan(Tmp1) == 0);
+Tmp1 = Tmp(:,5);
+UserData.IDExtMin           = Tmp1(isnan(Tmp1) == 0);
+Tmp1 = Tmp(:,6);
+UserData.IDRetDom           = Tmp1(isnan(Tmp1) == 0);
+Tmp1 = Tmp(:,7);
+UserData.IDRetLiv           = Tmp1(isnan(Tmp1) == 0);
+Tmp1 = Tmp(:,8);
+UserData.IDRetHy            = Tmp1(isnan(Tmp1) == 0);
+Tmp1 = Tmp(:,9);
+UserData.IDRetMin           = Tmp1(isnan(Tmp1) == 0);
+
+% -------------------------------------------------------------------------
+% SORT 
+% -------------------------------------------------------------------------
+[UserData.BasinCode,id]     = sort(UserData.BasinCode);
+UserData.BasinArea          = UserData.BasinArea(id);
+UserData.IDAq               = UserData.IDAq(id);
+UserData.Arc_InitNode       = UserData.Arc_InitNode(id);
+UserData.Arc_EndNode        = UserData.Arc_EndNode(id);
+UserData.Sw                 = UserData.Sw(id);
+UserData.Sg                 = UserData.Sg(id);
+
+
+%% PARAMETERS
+Tmp = NaN(length(UserData.BasinCode), 1);
+UserData.a                  = Tmp;
+UserData.b                  = Tmp;
+UserData.c                  = Tmp;
+UserData.d                  = Tmp;
+UserData.ParamExtSup        = Tmp;
+
+Tmp = NaN(length(UserData.ArcIDFlood), 1);
+UserData.Tpr                = Tmp;
+UserData.Trp                = Tmp;
+UserData.Q_Umb              = Tmp;
+UserData.V_Umb              = Tmp;
+
+%% SCE or DDS main configuration
+UserData.MethodOpti     = 'SCE';
+% parallel version: false or 0, true or otherwise
+UserData.parRuns        = 1; %true;
+% Define pop_ini to force initial evaluation of this population. Values
+% must be in real limits, otherwise pop_ini must be empty
+UserData.pop_ini        = [];
+% Maximum number of experiments or evaluations
+UserData.maxIter        = 260; %10000; 
+% ncomp: number of complexes (sub-pop.)- between 2 and 20
+UserData.ncomp          = 10;
+% ComplexSize: number of members en each complex
+UserData.complexSize    = 2;
+% simplexSize: number of members en each simplex
+UserData.simplexSize    = 2;
+% evolutionSteps
+UserData.evolSteps      = 2;
+% Reflection step lengths in the Simplex method
+UserData.alpha          = 0.8;
+% Contraction step lengths in the Simplex method
+UserData.beta           = 0.45;
+% verbose mode: false or 0, true or otherwise
+UserData.verbose        = 0;
+
+%% Limit Parameters
+a_min       = 0.01;     a_max       = 1;
+b_min       = 1;        b_max       = 1000;
+c_min       = 0.01;     c_max       = 1;
+d_min       = 0.01;     d_max       = 1;
+Q_Umb_min   = 1;        Q_Umb_max   = 3000;
+V_Umb_min   = 1;        V_Umb_max   = 3000;
+Trp_min     = 0.01;     Trp_max     = 1;
+Tpr_min     = 0.01;     Tpr_max     = 1;
+ExtSup_min  = 0.7;      ExtSup_max  = 1;
+
+clearvars Tmp Tmp1
+
+%% Crate Folder 
+mkdir(fullfile(UserData.PathProject, 'FIGURES','Calibration'))
+mkdir(fullfile(UserData.PathProject, 'FIGURES','Validation'))
+mkdir(fullfile(UserData.PathProject, 'FIGURES','Validation','ValidationModel_ExtSub'))
+mkdir(fullfile(UserData.PathProject, 'RESULTS','Parameters_Model'))
+mkdir(fullfile(UserData.PathProject, 'RESULTS','Parameters_Model',UserData.MethodOpti))
+
+
+%% PARALLEL POOL ON CLUSTER
+try
+   myCluster                = parcluster('local');
+   myCluster.NumWorkers     = UserData.CoresNumber;
+   saveProfile(myCluster);
+   parpool;
+catch
+end
+
+%% LOAD SCENARIOS
+Scenario        = cell2mat(UserData.Scenarios(:,2));
+
+%% Save Data
+NameBasin       = cell(1,length(UserData.BasinCode) + 1);
+NameBasin{1}    = 'Date_Matlab';
+
+BasinCode = UserData.BasinCode;
+parfor k = 2:length(UserData.BasinCode) + 1
+    NameBasin{k} = ['Basin_',num2str(BasinCode(k - 1))];
+end
+
+clearvars BasinCode
+
+for Sce = 1:length(Scenario)
+    %% DEMAND
+%     Cont = 1;
+%     for i = 1:length(UserData.DemandVar)
+%         DeRe = {'Demand','Return'};
+%         try
+%             for dr = 1:2
+% 
+%                 % Store Total Demand
+%                 NameFile = dir(fullfile(UserData.PathProject,'RESULTS','Demand',UserData.DemandVar{i},['Scenario-',num2str(Sce)],DeRe{dr},'*.dat'));
+%                 NameFile = {NameFile.name}';
+% 
+%                 if isempty(NameFile)
+%                     NameFile = dir(fullfile(UserData.PathProject,'RESULTS','Demand',UserData.DemandVar{i},['Scenario-',num2str(Sce)],DeRe{1},'*.dat'));
+%                     NameFile = {NameFile.name}';
+%                     Tmp     = dlmread(fullfile(UserData.PathProject,'RESULTS','Demand',UserData.DemandVar{i},['Scenario-',num2str(Sce)],DeRe{1},NameFile{1}),',',1,1);
+%                     Data    = Tmp(:,2:end)*0;
+% 
+%                 else
+%                     for k = 1:length(NameFile)
+%                         Tmp     = dlmread(fullfile(UserData.PathProject,'RESULTS','Demand',UserData.DemandVar{i},['Scenario-',num2str(Sce)],DeRe{dr},NameFile{k}),',',1,1);
+%                         DateD   = Tmp(:,1);
+%                         Tmp     = Tmp(:,2:end);
+%                         if k == 1
+%                             Data = Tmp;
+%                         else 
+%                             Data = Data + Tmp;
+%                         end
+%                         
+% %                         disp([NameFile{k},' = ',num2str(sum(sum(Tmp(end-11:end,:)),2)/1E6,'%0.2f')])
+%                     end
+%                 end
+% 
+%                 
+% 
+%                 %% Save Demand - Sector
+%                 NameDate    = cell(1,length(DateD));
+%                 parfor k = 1:length(DateD)
+%                     NameDate{k} = datestr(DateD(k),'dd-mm-yyyy');
+%                 end
+% 
+%                 Results = [DateD Data];
+%                 Results = array2table(Results,'VariableNames',NameBasin,'RowNames',NameDate);
+% 
+%                 writetable(Results, fullfile(UserData.PathProject,'RESULTS','Demand',UserData.DemandVar{i},['Scenario-',num2str(Sce)],['Total_',DeRe{dr},'.dat']), 'WriteRowNames',true)
+%             end
+%         catch
+%             disp('Pailas')
+%             
+%         end
+%     end
+    
+    %% LOAD CLIMATE DATA
+    % -------------------------------------------------------------------------
+    % Precipitation 
+    % -------------------------------------------------------------------------
+    try
+        P = dlmread(fullfile(UserData.PathProject,'RESULTS','P',['Pcp_Scenario-',num2str(Sce),'.dat']),',',1,1);
+        DateP   = P(:,1);
+        P       = P(:,2:end);
+    catch
+        errordlg('The Precipitation Data Not Found','!! Error !!')
+        return
+    end
+    
+    % -------------------------------------------------------------------------
+    % Evapotranspiration
+    % -------------------------------------------------------------------------
+    try
+        ET      = dlmread(fullfile(UserData.PathProject,'RESULTS','ETP',['ETP_Scenario-',num2str(Sce),'.dat']),',',1,1);
+        DateET  = ET(:,1);
+        ET      = ET(:,2:end);
+    catch
+        errordlg('The Evapotranspiration Data Not Found','!! Error !!')
+        return
+    end
+    
+    %% LOAD STRAMFLOW DATA
+    try
+        [Qobs,TmpDate]  = xlsread( fullfile(UserData.PathProject,'DATA','Hydrological',UserData.DataStreamFlow) );
+        CodeGaugesQ     = Qobs(1,:)';
+        Qobs            = Qobs(2:end,:);
+        DateQ           = datenum( TmpDate(2:(length(Qobs(:,1)) + 1),1) );
+    catch
+        errordlg(['The Excel "',UserData.DataStreamFlow,'" not found'],'!! Error !!')
+        return
+    end
+    
+    try
+        [CodeQ_CV,TmpDate]  = xlsread( fullfile(UserData.PathProject,'DATA','Params',UserData.DataParams), 'Calibration_Validation');
+        TmpDate             = TmpDate(3:(length(CodeQ_CV) + 2),2:end);
+        DateCal             = [datenum(TmpDate(:,1)) datenum(TmpDate(:,2))];
+        DateVal             = NaN(length(CodeQ_CV),2);
+        
+        parfor dt = 1:length(CodeQ_CV)
+            try
+                DateVal(dt,:) = [datenum(TmpDate(dt,3)) datenum(TmpDate(dt,4))];
+            catch
+                DateVal(dt,:) = NaN(1,2);
+            end
+        end
+        
+    catch
+        errordlg(['The Excel "',UserData.DataStreamFlow,'" not found'],'!! Error !!')
+        return
+    end
+    
+    %% LOAD DEMAND DATA  
+    % TOTAL DEMAND 
+    for dr = 1:2
+        for i = 1:length(UserData.DemandVar)
+            DeRe = {'Demand','Return'};
+            try
+                Tmp     = dlmread(fullfile(UserData.PathProject,'RESULTS','Demand',UserData.DemandVar{i},['Scenario-',num2str(Sce)],['Total_',DeRe{dr},'.dat']),',',1,1);
+                eval([DeRe{dr},'(:,:,',num2str(i),') = Tmp(:,2:end);']);
+            catch
+                eval([DeRe{dr},'(:,:,',num2str(i),') = Tmp(:,2:end)*0;']);
+            end
+        end
+    end
+    DateD = Tmp(:,1);
+    
+    Demand(isnan(Demand))       = 0;
+    Return(isnan(Return))       = 0;
+    
+    %% Borrame Ojojoj
+%     Demand(isnan(Demand))       = 0;
+%     Return(isnan(Return))       = 0;
+    
+    
+    
+    
+    
+    
+    % groundwater Demand
+    UserData.DemandSub = zeros(size(Demand(:,:,1)));
+    
+    %% CALIBRACION
+    clc
+    % Id Basin by Arcid Downstream
+    PoPo        = zeros(length(UserData.BasinCode),1); 
+    
+    % Id Basin with Floodplains
+    PoPoFlood   = zeros(length(UserData.ArcIDFlood),1);
+    
+    PoPoID      = PoPo;
+    PoPoFloodID = PoPoFlood;
+    
+    NumberCat   = unique(UserData.CatGauges);
+    
+    
+    
+    for i = 1:length(NumberCat)
+        
+        id = find(UserData.CatGauges == NumberCat(i) );
+        
+        for j = 1:length(id)
+            
+            UserData.DownGauges = UserData.ArIDGauges(id(j));
+            %  
+            [PoPo, PoPoFlood]   = GetNetwork( UserData.BasinCode,...
+                                              UserData.Arc_InitNode,...
+                                              UserData.Arc_EndNode,...
+                                              UserData.ArIDGauges(id(j)),...
+                                              PoPo,...
+                                              PoPoFlood,...
+                                              UserData.ArcIDFlood);
+              
+            PoPoID                  = (PoPoID + PoPo);
+            PoPoFloodID             = (PoPoFloodID + PoPoFlood);
+
+            UserData.IDPoPo         = (PoPoID  == 1);
+            UserData.IDPoPoFlood    = (PoPoFloodID  == 1);
+            
+            UserData.PoPo           = logical(PoPo);
+            UserData.PoPoFlood      = logical(PoPoFlood);
+            
+            [~,PosiQ]               = ismember(UserData.CodeGauges(id(j)), CodeQ_CV);
+            idC                     = (DateQ >= DateCal(PosiQ,1) & DateQ <= DateCal(PosiQ,2));
+            
+            [~,PosiQ]               = ismember(UserData.CodeGauges(id(j)), CodeGaugesQ);
+            UserData.Qobs           = Qobs(idC ,PosiQ);
+            
+            [~,PosiQ]               = ismember(UserData.CodeGauges(id(j)), CodeQ_CV);
+            idC                     = (DateP >= DateCal(PosiQ,1) & DateP <= DateCal(PosiQ,2));
+            
+            UserData.P              = P(idC,:);
+
+            idC                     = (DateET >= DateCal(PosiQ,1) & DateET <= DateCal(PosiQ,2));
+            UserData.ET             = ET(idC,:);
+           
+            idC                     = (DateD >= DateCal(PosiQ,1) & DateD <= DateCal(PosiQ,2));
+            
+            UserData.DemandSup      = Demand(idC,:,:);
+            UserData.Returns        = Return(idC,:,:);
+            UserData.Date           = DateD(idC);
+            
+            %%
+            tic
+            disp(['[i = ',num2str(i),' - j = ',num2str(j), ']  Gauges = ',num2str(UserData.ArIDGauges(id(j)))])
+            disp('-------------------------------------------')  
+            
+            % SCE - Calibration
+            if i == 100% ((i == 10) && (j > 1)) || (i > 10)
+                
+                if sum(PoPoFlood) == 0
+                    CalMode = 1;
+                    UserData.CalMode = CalMode;
+                    
+                    [Param,Bestf,allbest,allEvals] = sce('Function_Obj',UserData.pop_ini,...
+                        [a_min, b_min, c_min, d_min, ExtSup_min],...
+                        [a_max, b_max, c_max, d_max, ExtSup_max],...
+                        UserData.ncomp, UserData);
+
+                    save(fullfile(UserData.PathProject, 'RESULTS','Parameters_Model','SCE',...
+                        [num2str(UserData.CodeGauges(id(j))),'-',num2str(UserData.DownGauges),'_SCE.mat']),...
+                        'Param','Bestf','allbest','allEvals','CalMode')
+
+                else
+                    CalMode = 2;
+                    UserData.CalMode = CalMode;
+                    [Param,Bestf,allbest,allEvals] = sce('Function_Obj',UserData.pop_ini,...
+                        [a_min, b_min, c_min, d_min Q_Umb_min V_Umb_min Tpr_min Trp_min ExtSup_min],...
+                        [a_max, b_max, c_max, d_max, Q_Umb_max V_Umb_max Tpr_max Trp_max ExtSup_max],...
+                        UserData.ncomp, UserData);
+
+                    save(fullfile(UserData.PathProject, 'RESULTS','Parameters_Model','SCE',...
+                        [num2str(UserData.CodeGauges(id(j))),'-',num2str(UserData.DownGauges),'_SCE.mat']),...
+                        'Param','Bestf','allbest','allEvals','CalMode')
+                end
+                
+                % asignacion de parametros
+                UserData.a(UserData.IDPoPo)  = Param(1);
+                UserData.b(UserData.IDPoPo)  = Param(2);
+                UserData.c(UserData.IDPoPo)  = Param(3);
+                UserData.d(UserData.IDPoPo)  = Param(4);
+
+                if UserData.CalMode == 1
+                    UserData.ParamExtSup(UserData.IDPoPo)    = Param(5);
+                else
+                    UserData.ParamExtSup(UserData.IDPoPo)    = Param(9);
+
+                    UserData.Q_Umb(UserData.IDPoPoFlood)     = Param(5);
+                    UserData.V_Umb(UserData.IDPoPoFlood)     = Param(6);
+                    UserData.Tpr(UserData.IDPoPoFlood)       = Param(7);
+                    UserData.Trp(UserData.IDPoPoFlood)       = Param(8);
+                end
+                
+                UserData.GaugesStreamFlowQ   = UserData.CodeGauges(id(j));
+                
+                %% plot 
+                Fig = PlotCalibrationModel(Param, UserData);
+                
+                saveas(Fig, fullfile(UserData.PathProject, 'FIGURES','Calibration',...
+                    [num2str(UserData.CodeGauges(id(j))),'-',num2str(UserData.DownGauges),'.jpg']))
+                
+                close all 
+                clearvars Fig
+                
+                disp(['  Nash = ', num2str(1 - Bestf,'%0.3f'),'  Time = ',num2str(toc,'%0.3f')])
+                disp('-------------------------------------------') 
+                
+            else 
+                load(fullfile(UserData.PathProject, 'RESULTS','Parameters_Model','SCE',...
+                        [num2str(UserData.CodeGauges(id(j))),'-',num2str(UserData.DownGauges),'_SCE.mat']))
+                
+                %% Parameter Asignation
+                UserData.a(UserData.IDPoPo)  = Param(1);
+                UserData.b(UserData.IDPoPo)  = Param(2);
+                UserData.c(UserData.IDPoPo)  = Param(3);
+                UserData.d(UserData.IDPoPo)  = Param(4);
+
+                if CalMode == 1
+                    UserData.ParamExtSup(UserData.IDPoPo)    = Param(5);
+                    
+                else
+                    UserData.ParamExtSup(UserData.IDPoPo)    = Param(9);
+
+                    UserData.Q_Umb(UserData.IDPoPoFlood)     = Param(5);
+                    UserData.V_Umb(UserData.IDPoPoFlood)     = Param(6);
+                    UserData.Tpr(UserData.IDPoPoFlood)       = Param(7);
+                    UserData.Trp(UserData.IDPoPoFlood)       = Param(8);
+                end
+                
+                UserData.GaugesStreamFlowQ   = UserData.CodeGauges(id(j));
+                
+                %% plot 
+%                 Fig = PlotCalibrationModel(Param, UserData);
+%                 
+%                 saveas(Fig, fullfile(UserData.PathProject, 'FIGURES','Calibration',...
+%                     [num2str(UserData.CodeGauges(id(j))),'-',num2str(UserData.DownGauges),'.jpg']))
+%                 
+%                 close all 
+%                 clearvars Fig
+                
+                disp(['  Nash = ', num2str(1 - Bestf,'%0.3f'),'  Time = ',num2str(toc,'%0.3f')])
+                disp('-------------------------------------------')  
+            end
+            
+        end
+    end
+
+    %% VALIDATION
+    SummaryCal  = NaN(28, 22);
+    SummaryVal  = NaN(28, 22);
+    
+    % Id Basin by Arcid Downstream
+    PoPo        = zeros(length(UserData.BasinCode),1); 
+    % Id Basin with Floodplains
+    PoPoFlood   = zeros(length(UserData.ArcIDFlood),1);
+    
+    PoPoID      = PoPo;
+    PoPoFloodID = PoPoFlood;
+    
+    NumberCat = unique(UserData.CatGauges);
+    Count = 1;
+    for i = 1:length(NumberCat)
+        
+        id = find(UserData.CatGauges == NumberCat(i) );
+
+        for j = 1:length(id)
+            
+            UserData.DownGauges = UserData.ArIDGauges(id(j));
+            [PoPo, PoPoFlood] = GetNetwork( UserData.BasinCode,...
+                          UserData.Arc_InitNode, UserData.Arc_EndNode,...
+                          UserData.ArIDGauges(id(j)), PoPo, PoPoFlood, UserData.ArcIDFlood);
+              
+            PoPoID                  = (PoPoID + PoPo);
+            PoPoFloodID             = (PoPoFloodID + PoPoFlood);
+
+            UserData.IDPoPo         = (PoPoID  == 1);
+            UserData.IDPoPoFlood    = (PoPoFloodID  == 1);
+            
+            UserData.PoPo           = logical(PoPo);
+            UserData.PoPoFlood      = logical(PoPoFlood);
+            
+            % Streamflow
+            [~,PosiQ]   = ismember(UserData.CodeGauges(id(j)), CodeQ_CV);
+            idC = find(DateQ >= DateVal(PosiQ,1) & DateQ <= DateVal(PosiQ,2));
+            
+            
+            if isnan(DateVal(PosiQ,2))
+                continue
+            end
+            
+            % Date
+            UserData.DateQobs   = DateD(idC);
+            
+            [~,PosiQ]       = ismember(UserData.CodeGauges(id(j)), CodeGaugesQ);
+            UserData.Qobs   = Qobs(idC ,PosiQ);
+            
+            UserData.P          = P;
+            UserData.ET         = ET;
+            UserData.DemandSup  = Demand;
+            UserData.Returns    = Return;
+            
+            % Date
+            UserData.Date       = DateD;
+            
+            UserData.GaugesStreamFlowQ   = UserData.CodeGauges(id(j));
+
+             % plot 1
+            [Fig, ~] = PlotValidationModel(UserData);
+            saveas(Fig, fullfile(UserData.PathProject, 'FIGURES','Validation',...
+                [num2str(UserData.CodeGauges(id(j))),'-',num2str(UserData.DownGauges),'.jpg']))
+            close all 
+            clearvars Fig
+            
+            %% plot 2 
+%             Fig = PlotValidationModel_ExtSub(Param, UserData);
+%             saveas(Fig, fullfile(UserData.PathProject, 'FIGURES','ValidationModel_ExtSub',...
+%                 [num2str(UserData.CodeGauges(id(j))),'-',num2str(UserData.DownGauges),'.jpg']))
+%             close all 
+%             clearvars Fig
+            
+%             Count = Count + 1;
+            disp(['i=',num2str(i),' - j=',num2str(j), '  Gauges =',...
+                    num2str(UserData.ArIDGauges(id(j))), '  Nash = ', ...
+                    num2str(1 - Bestf,'%0.3f'),'  Time = ',num2str(toc,'%0.3f')])
+        end
+    end
+    
+    %% Asignacion Params
+    CBNC = unique(UserData.TypeBasinCal(logical(PoPoID ==  0)));
+    for i = 1:length(CBNC)
+        id = UserData.TypeBasinCal == CBNC(i);
+        
+        UserData.a(id)  = UserData.a(UserData.BasinCode == CBNC(i) );
+        UserData.b(id)  = UserData.b(UserData.BasinCode == CBNC(i) );
+        UserData.c(id)  = UserData.c(UserData.BasinCode == CBNC(i) );
+        UserData.d(id)  = UserData.d(UserData.BasinCode == CBNC(i) );
+    end
+    
+    CBNC           = UserData.TypeBasinCal(logical(PoPoID ==  0));
+    CodeType       = UserData.BasinCode(logical(PoPoID ==  0));
+    [id, posi]     = ismember(CodeType, UserData.ArcIDFlood);
+    
+    CodeType = CodeType(id);
+    CBNC     = CBNC(id);
+    
+    CCNC    = unique(CBNC);
+    
+    for i = 1:length(CCNC)
+        id          = UserData.ArcIDFlood == CCNC(i);
+        [id2, ~]    = ismember(CodeType, UserData.ArcIDFlood);
+        
+        UserData.Q_Umb(id2)  = UserData.Q_Umb(id);
+        UserData.V_Umb(id2)  = UserData.V_Umb(id);
+        UserData.Tpr(id2)    = UserData.Tpr(id);
+        UserData.Trp(id2)    = UserData.Trp(id);
+    end
+    
+    Params.a = UserData.a;
+    Params.b = UserData.b;
+    Params.c = UserData.c;
+    Params.d = UserData.d;
+    
+    Params.Q_Umb    = UserData.Q_Umb;
+    Params.V_Umb    = UserData.V_Umb;
+    Params.Tpr      = UserData.Tpr;
+    Params.Trp      = UserData.Trp;
+    
+%     save(fullfile(UserData.PathProject, 'RESULTS','ParamModel','Metric.mat'),'SummaryCal', 'SummaryVal')
+    save(fullfile(UserData.PathProject, 'RESULTS','Parameters_Model','ParamModel_Complet.mat'),'Params')
+end
